@@ -1,4 +1,4 @@
-name: Deploy Java App to EC2 Tomcat
+name: Deploy Node.js App to EC2
 
 on:
   push:
@@ -6,39 +6,22 @@ on:
       - main
 
 jobs:
-  build:
+  deploy:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up JDK 11
-        uses: actions/setup-java@v1
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
         with:
-          java-version: 11
+          node-version: '18'  # Adjust if needed
 
-      - name: Build with Maven
-        run: mvn clean package
+      - name: Install dependencies
+        run: npm install
 
-      - name: Upload WAR artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: java-app
-          path: target/*.war
-
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Download WAR artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: java-app
-          path: target
-
-      - name: Deploy WAR to EC2
+      - name: Deploy to EC2 via SSH
         env:
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
           HOSTNAME: ${{ secrets.SSH_HOST }}
@@ -48,9 +31,15 @@ jobs:
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -H "$HOSTNAME" >> ~/.ssh/known_hosts
 
-          # Copy WAR to EC2
-          scp -i ~/.ssh/id_rsa target/*.war ec2-user@$HOSTNAME:/home/ec2-user/
+          ssh -i ~/.ssh/id_rsa ec2-user@$HOSTNAME << 'EOF'
+            if [ ! -d "app" ]; then
+              git clone https://github.com/Hafiz-mn/java_project.git app
+            else
+              cd app && git pull
+            fi
+            cd app
+            npm install
+            pm2 restart app.js || pm2 start app.js
+          EOF
 
-          # Move WAR to Tomcat webapps
-          ssh -i ~/.ssh/id_rsa ec2-user@$HOSTNAME 'sudo mv /home/ec2-user/*.war /opt/tomcat9/webapps/'
 
