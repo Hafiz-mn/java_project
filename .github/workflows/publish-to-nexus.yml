@@ -1,4 +1,4 @@
-name: Publish to Nexus
+name: CI/CD with Nexus and EC2
 
 on:
   push:
@@ -6,11 +6,11 @@ on:
       - main
 
 jobs:
-  publish:
+  deploy:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
+      - name: Checkout repo
         uses: actions/checkout@v4
 
       - name: Set up Node.js
@@ -18,15 +18,40 @@ jobs:
         with:
           node-version: '18'
 
-      - name: Authenticate with Nexus
+      - name: Set up .npmrc for Nexus
         run: |
-          echo "//<YOUR-EC2-IP>:8081/repository/npm-hosted/:_authToken=${NEXUS_TOKEN}" > ~/.npmrc
-          echo "always-auth=true" >> ~/.npmrc
+          echo "//${NPM_REGISTRY_URL#http://}:_auth=$(echo -n '${NPM_USERNAME}:${NPM_PASSWORD}' | base64)" > ~/.npmrc
+          echo "registry=${NPM_REGISTRY_URL}" >> ~/.npmrc
         env:
-          NEXUS_TOKEN: ${{ secrets.NEXUS_AUTH_TOKEN }}
+          NPM_USERNAME: ${{ secrets.NPM_USERNAME }}
+          NPM_PASSWORD: ${{ secrets.NPM_PASSWORD }}
+          NPM_REGISTRY_URL: ${{ secrets.NPM_REGISTRY_URL }}
 
       - name: Install dependencies
         run: npm install
 
+      # Optional: Publish to Nexus if needed
       - name: Publish package to Nexus
         run: npm publish
+
+      - name: Deploy to EC2 via SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          HOSTNAME: ${{ secrets.SSH_HOST }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H "$HOSTNAME" >> ~/.ssh/known_hosts
+
+          ssh -i ~/.ssh/id_rsa ec2-user@$HOSTNAME << 'EOF'
+            if [ ! -d "app" ]; then
+              git clone https://github.com/Hafiz-mn/java_project.git app
+            else
+              cd app && git pull
+            fi
+            cd app
+            npm install
+            pm2 restart app.js || pm2 start app.js
+          EOF
+
