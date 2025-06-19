@@ -19,5 +19,8 @@
         "mongodb": "^3.4.1",
         "mongoose": "^5.8.3",
         "nodemon": "^2.0.2"
+    },
+    "publishConfig": {
+        "registry": "http://51.20.138.98:8081/repository/npm-hosted/"
     }
 }
