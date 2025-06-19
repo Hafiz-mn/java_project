@@ -1,0 +1,32 @@
+name: Publish to Nexus
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Authenticate with Nexus
+        run: |
+          echo "//<YOUR-EC2-IP>:8081/repository/npm-hosted/:_authToken=${NEXUS_TOKEN}" > ~/.npmrc
+          echo "always-auth=true" >> ~/.npmrc
+        env:
+          NEXUS_TOKEN: ${{ secrets.NEXUS_AUTH_TOKEN }}
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Publish package to Nexus
+        run: npm publish
